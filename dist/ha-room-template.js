@@ -12,12 +12,15 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.6.0";
+const CARD_VERSION = "1.7.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
 // not room state.
 const SOCKET_CLASS = "power";
+// Things that are appliances rather than plugs. Their own card or dialog owns
+// them; their settings switches are not room controls.
+const APPLIANCE_DOMAINS = ["vacuum", "lawn_mower", "water_heater", "media_player", "camera"];
 
 /* Price sources, finest block first. The Dutch market settles in quarter hours,
  * so a quarter-hourly sensor beats an hourly average of the same prices. Chosen
@@ -266,11 +269,22 @@ class RoomTemplate extends HTMLElement {
     return undefined;
   }
 
-  /** Metered plugs: the switch to press, or the reading when there is none. */
+  /** Metered plugs: the switch to press, or the reading when there is none.
+   *
+   * An appliance that owns its own domain entity is not a socket, whatever
+   * switches it exposes: a robot vacuum publishes a dozen setting toggles, and
+   * the first one found was appearing in the room as a plug named after the
+   * robot, with no power behind it.
+   */
   _sockets(entities) {
+    const appliances = new Set(
+      entities
+        .filter((e) => APPLIANCE_DOMAINS.includes(e.domain) && e.device)
+        .map((e) => e.device)
+    );
     const byDevice = new Map();
     for (const entity of entities) {
-      if (!entity.device) continue;
+      if (!entity.device || appliances.has(entity.device)) continue;
       const socket = byDevice.get(entity.device) || { device: entity.device };
       if (entity.domain === "switch" && !socket.switch) socket.switch = entity;
       if (entity.domain === "sensor" && entity.deviceClass === SOCKET_CLASS && !socket.power) {
@@ -415,7 +429,14 @@ class RoomTemplate extends HTMLElement {
         </div>`);
     }
 
-    const lights = config.show_lights ? entities.filter((e) => e.domain === "light") : [];
+    const applianceDevices = new Set(
+      entities
+        .filter((e) => APPLIANCE_DOMAINS.includes(e.domain) && e.device)
+        .map((e) => e.device)
+    );
+    const lights = config.show_lights
+      ? entities.filter((e) => e.domain === "light" && !applianceDevices.has(e.device))
+      : [];
     if (lights.length) {
       rows.push(`<div class="grid">
         ${lights
