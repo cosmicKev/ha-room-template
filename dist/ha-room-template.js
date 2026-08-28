@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.10.0";
+const CARD_VERSION = "1.11.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -503,9 +503,9 @@ class RoomTemplate extends HTMLElement {
                         <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" "))}</span>
                       </button>`;
             }
-            // No switch: some plugs here are deliberately not switchable from a
-            // dashboard (the fridge, the Quooker). A reading, then - greyed, so
-            // it does not read as a control that failed.
+            // No switch: some plugs are deliberately not switchable from a
+            // dashboard (a fridge, a boiling-water tap). A reading, then -
+            // full weight, not dimmed: it is not a control that failed.
             return `<div class="chip reading" data-action="more-info" data-value="${this._esc(socket.power.id)}">
                       <ha-icon icon="mdi:flash"></ha-icon>
                       <span class="chip-name">${label}</span>
@@ -622,7 +622,11 @@ RoomTemplate.styles = `
   .chip:active { transform: scale(0.97); }
   .chip.active { border-color: var(--primary-color); color: var(--primary-color); }
   .chip.active ha-icon { color: var(--primary-color); }
-  .chip.reading { color: var(--secondary-text-color); opacity: 0.75; cursor: pointer; }
+  /* A reading is not a disabled control. Dimming it said "this is broken" about
+     a fridge that is working perfectly and simply has no switch to offer, so it
+     carries the same weight as everything else - it just does not light up,
+     because there is no state to be in. */
+  .chip.reading { cursor: pointer; }
   .chip-name { line-height: 1.2; }
   .chip-sub {
     font-size: 11px; font-weight: 500; color: var(--secondary-text-color);
