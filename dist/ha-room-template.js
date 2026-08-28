@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.14.0";
+const CARD_VERSION = "1.15.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -23,6 +23,17 @@ const ENVIRONMENT = ["temperature", "humidity", "carbon_dioxide", "pm25", "pm10"
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
 // not room state.
 const SOCKET_CLASS = "power";
+/* A metered plug publishes the same watts twice - "Power" and "Instantaneous
+ * demand" - and they are not the same number: the demand register is a smoothed
+ * or last-interval figure the meter keeps for its own purposes, while Power is
+ * what the plug is drawing now. Both carry device_class power, so the first one
+ * found wins unless the card has an opinion. It has one, in this order. */
+const POWER_PREFERENCE = ["_power", "_active_power", "_instantaneous_demand"];
+
+function powerRank(entityId) {
+  const index = POWER_PREFERENCE.findIndex((suffix) => entityId.endsWith(suffix));
+  return index === -1 ? POWER_PREFERENCE.length : index;
+}
 // Things that are appliances rather than plugs. Their own card or dialog owns
 // them; their settings switches are not room controls.
 const APPLIANCE_DOMAINS = ["vacuum", "lawn_mower", "water_heater", "media_player", "camera"];
@@ -305,8 +316,10 @@ class RoomTemplate extends HTMLElement {
       if (!entity.device || appliances.has(entity.device)) continue;
       const socket = byDevice.get(entity.device) || { device: entity.device };
       if (entity.domain === "switch" && !socket.switch) socket.switch = entity;
-      if (entity.domain === "sensor" && entity.deviceClass === SOCKET_CLASS && !socket.power) {
-        socket.power = entity;
+      if (entity.domain === "sensor" && entity.deviceClass === SOCKET_CLASS) {
+        if (!socket.power || powerRank(entity.id) < powerRank(socket.power.id)) {
+          socket.power = entity;
+        }
       }
       byDevice.set(entity.device, socket);
     }
