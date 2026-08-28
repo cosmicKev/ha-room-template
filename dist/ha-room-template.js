@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.11.0";
+const CARD_VERSION = "1.12.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -551,8 +551,13 @@ RoomTemplate.styles = `
     padding: 12px 14px 14px;
     border: 1px solid var(--ha-card-border-color, var(--divider-color));
   }
+  /* The header and its rule are exactly one chip tall, so the first row of
+     controls starts at the same height on every card in a floor - and a card
+     with a long room name does not push its buttons out of line with the card
+     beside it. */
   .head {
     display: flex; align-items: center; gap: 10px;
+    height: 78px; box-sizing: border-box;
     padding-bottom: 10px; margin-bottom: 12px;
     border-bottom: 1px solid var(--divider-color);
   }
