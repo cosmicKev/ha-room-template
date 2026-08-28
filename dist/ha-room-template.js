@@ -12,9 +12,14 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.9.1";
+const CARD_VERSION = "1.10.0";
 
-const ENVIRONMENT = ["temperature", "humidity"];
+// What a room reports about its own air, in the order it reads in the header.
+// CO2 and particulates are here because a room sensor that measures them is
+// telling you something about the room, not about the weather - and the ppm is
+// the number you act on, so it belongs beside the temperature rather than three
+// rows down.
+const ENVIRONMENT = ["temperature", "humidity", "carbon_dioxide", "pm25", "pm10"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
 // not room state.
 const SOCKET_CLASS = "power";
@@ -392,7 +397,11 @@ class RoomTemplate extends HTMLElement {
       const unit = reading.state.attributes.unit_of_measurement || "";
       const value = this._number(reading.state.state, kind === "temperature" ? 1 : 0);
       if (value === undefined) return "";
-      return `<span class="badge" data-action="more-info" data-value="${this._esc(reading.id)}">
+      // Stale air is the one reading worth colouring: 1000 ppm is where advice
+      // everywhere says open a window, 1400 where it starts costing you.
+      const ppm = kind === "carbon_dioxide" ? Number(reading.state.state) : NaN;
+      const warn = !isNaN(ppm) && ppm >= 1400 ? " bad" : !isNaN(ppm) && ppm >= 1000 ? " warn" : "";
+      return `<span class="badge${warn}" data-action="more-info" data-value="${this._esc(reading.id)}">
                 ${this._esc(value)}${this._esc(unit)}</span>`;
     }).join("");
 

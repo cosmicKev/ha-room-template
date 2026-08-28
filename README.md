@@ -24,7 +24,10 @@ drawn, so a room with no lights shows no light row rather than an empty one.
 
 ## What it does
 
-**The header is the room.** Its name, and the temperature and humidity in it. If
+**The header is the room.** Its name, and what it reports about its own air:
+temperature, humidity, CO2 and particulates, in that order, each shown only if
+something in the room measures it. CO2 turns amber past 1000 ppm and red past
+1400 — the readings you act on rather than watch. If
 the area has a temperature or humidity entity assigned, that is what is shown;
 otherwise the first sensor of that class in the room. One reading per class, so
 a room with a radiator and a presence sensor does not print its temperature
