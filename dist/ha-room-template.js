@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.1.2";
+const CARD_VERSION = "1.2.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -32,6 +32,12 @@ const TARIFF_CANDIDATES = [
 ];
 
 const DEFAULTS = {
+  // A radiator is never set to 5 or to 30: a slider spanning the device's full
+  // range spends most of its travel on temperatures nobody picks, which makes
+  // the useful part too fine to hit. 15-25 is the band a house is actually
+  // lived in; the device's own limits still clamp it.
+  min: 15,
+  max: 25,
   show_climate: true,
   show_lights: true,
   show_sockets: true,
@@ -55,11 +61,22 @@ class RoomTemplate extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._rendered = "";
     this.shadowRoot.addEventListener("click", (event) => this._onClick(event));
-    // `change` rather than `input`: one service call when the finger lifts, not
-    // one per pixel of drag.
+    // Two listeners, two jobs. `input` fires on every step of the drag and only
+    // updates the number on screen - without it the slider is a handle with no
+    // idea what it is selecting until you let go. `change` fires once, when the
+    // finger lifts, and is the only one that calls a service.
+    this.shadowRoot.addEventListener("input", (event) => {
+      const slider = event.target.closest('[data-action="target"]');
+      if (!slider) return;
+      this._dragging = true;
+      const readout = this.shadowRoot.querySelector('[data-role="target"]');
+      if (readout) readout.textContent = `${Number(slider.value).toFixed(1)}°`;
+    });
     this.shadowRoot.addEventListener("change", (event) => {
       const slider = event.target.closest('[data-action="target"]');
-      if (slider) this._setTarget(Number(slider.value));
+      if (!slider) return;
+      this._dragging = false;
+      this._setTarget(Number(slider.value));
     });
   }
 
@@ -80,6 +97,9 @@ class RoomTemplate extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // Re-rendering mid-drag would rebuild the slider from the state the
+    // thermostat still reports and snap the handle out from under the finger.
+    if (this._dragging) return;
     this._render();
   }
 
@@ -320,12 +340,11 @@ class RoomTemplate extends HTMLElement {
       // A slider rather than a pair of arrows: setting 21.5 from 18 is one drag
       // instead of seven presses, and the position itself says where in the
       // range the room is set.
-      const min = Number(
-        thermostat.kind === "climate" ? thermostat.state.attributes.min_temp ?? 5 : config.min ?? 5
-      );
-      const max = Number(
-        thermostat.kind === "climate" ? thermostat.state.attributes.max_temp ?? 30 : config.max ?? 30
-      );
+      // The configured band, never wider than the device will accept.
+      const deviceMin = Number(thermostat.state.attributes.min_temp);
+      const deviceMax = Number(thermostat.state.attributes.max_temp);
+      const min = Math.max(Number(config.min), isNaN(deviceMin) ? -Infinity : deviceMin);
+      const max = Math.min(Number(config.max), isNaN(deviceMax) ? Infinity : deviceMax);
       const step = Number(config.step) || 0.5;
       const shown = isNaN(target) ? "—" : `${target.toFixed(1)}°`;
       rows.push(`
@@ -337,7 +356,7 @@ class RoomTemplate extends HTMLElement {
                 current !== undefined ? ` · now ${this._esc(current)}°` : ""
               }</div>
             </div>
-            <div class="target">${this._esc(shown)}</div>
+            <div class="target" data-role="target">${this._esc(shown)}</div>
           </div>
           <input class="slider" type="range" data-action="target"
                  min="${min}" max="${max}" step="${step}"

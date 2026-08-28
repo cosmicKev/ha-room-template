@@ -30,7 +30,11 @@ otherwise the first sensor of that class in the room. One reading per class, so
 a room with a radiator and a presence sensor does not print its temperature
 twice.
 
-**One target temperature, on a slider, whichever device owns it.** Where a room has an air
+**One target temperature, on a slider, whichever device owns it.** The slider
+spans 15–25 °C rather than the device's full range: a radiator is never set to 5
+or 30, and a slider that offers them spends most of its travel on temperatures
+nobody picks. The reading follows the handle as you drag, and the service call
+happens once, when you let go. Where a room has an air
 conditioner it wins — cheaper to run than a radiator — and the card sends the
 target there instead. Two shapes are supported: a `climate` entity of its own,
 or the helper-and-script route an IR-driven unit needs. With no aircon
@@ -62,7 +66,7 @@ a dynamic price that steps every quarter hour is the price you see.
 | `climate.aircon_ir` | — | `{temperature, mode, apply}` for an IR-driven unit |
 | `tariff` | see below | €/kWh sensor for the price |
 | `step` | `0.5` | Slider resolution, in degrees |
-| `min` / `max` | the thermostat's own | Slider range (IR route only) |
+| `min` / `max` | `15` / `25` | Slider range, clamped by the thermostat's own limits |
 | `cost_entities` | discovered | `{"Fridge": "sensor.fridge_cost_today"}` overrides |
 | `show_climate` / `show_lights` / `show_sockets` / `show_price` | `true` | Rows |
 
