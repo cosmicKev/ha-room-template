@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.7.0";
+const CARD_VERSION = "1.8.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -521,7 +521,14 @@ class RoomTemplate extends HTMLElement {
 
 RoomTemplate.styles = `
   :host { display: block; }
-  ha-card { padding: 12px 14px 14px; }
+  /* An explicit edge, not the theme's ha-card-border-width: this house sets that
+     to 0, so cards float with no outline at all - fine for a single tile, wrong
+     for a card that is a container of other cards. The colour still follows the
+     theme. */
+  ha-card {
+    padding: 12px 14px 14px;
+    border: 1px solid var(--ha-card-border-color, var(--divider-color));
+  }
   .head {
     display: flex; align-items: center; gap: 10px;
     padding-bottom: 10px; margin-bottom: 12px;
