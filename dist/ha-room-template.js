@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.15.0";
+const CARD_VERSION = "1.16.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -313,15 +313,19 @@ class RoomTemplate extends HTMLElement {
     );
     const byDevice = new Map();
     for (const entity of entities) {
-      if (!entity.device || appliances.has(entity.device)) continue;
-      const socket = byDevice.get(entity.device) || { device: entity.device };
+      if (appliances.has(entity.device)) continue;
+      // A switch defined in YAML - wake-on-LAN, a template, a command_line -
+      // belongs to no device at all, and keying only on device names dropped it
+      // silently. Its own entity id is the key then, and its own name the label.
+      const key = entity.device || entity.id;
+      const socket = byDevice.get(key) || { device: entity.device || entity.label };
       if (entity.domain === "switch" && !socket.switch) socket.switch = entity;
       if (entity.domain === "sensor" && entity.deviceClass === SOCKET_CLASS) {
         if (!socket.power || powerRank(entity.id) < powerRank(socket.power.id)) {
           socket.power = entity;
         }
       }
-      byDevice.set(entity.device, socket);
+      byDevice.set(key, socket);
     }
     return [...byDevice.values()].filter((socket) => socket.power || socket.switch);
   }
