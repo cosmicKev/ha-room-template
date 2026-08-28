@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -40,11 +40,27 @@ const DEFAULTS = {
 };
 
 class RoomTemplate extends HTMLElement {
+  static label(friendly, device) {
+    if (!device) return friendly;
+    if (friendly.toLowerCase().startsWith(device.toLowerCase())) {
+      const rest = friendly.slice(device.length).trim();
+      if (rest) return rest.charAt(0).toUpperCase() + rest.slice(1);
+      return device;
+    }
+    return friendly || device;
+  }
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
     this._rendered = "";
     this.shadowRoot.addEventListener("click", (event) => this._onClick(event));
+    // `change` rather than `input`: one service call when the finger lifts, not
+    // one per pixel of drag.
+    this.shadowRoot.addEventListener("change", (event) => {
+      const slider = event.target.closest('[data-action="target"]');
+      if (slider) this._setTarget(Number(slider.value));
+    });
   }
 
   static getStubConfig(hass) {
@@ -85,13 +101,20 @@ class RoomTemplate extends HTMLElement {
       if (entry.hidden || entry.disabled_by || entry.entity_category) continue;
       const state = hass.states[id];
       if (!state) continue;
+      const deviceName = (device && (device.name_by_user || device.name)) || "";
+      const friendly = state.attributes.friendly_name || id;
       found.push({
         id,
         domain: id.split(".")[0],
         state,
         deviceClass: state.attributes.device_class,
-        device: (device && (device.name_by_user || device.name)) || "",
-        name: state.attributes.friendly_name || id,
+        device: deviceName,
+        name: friendly,
+        // Two ceiling lights on one device are both called "Lights" if you
+        // label by device; their own names are "Couch" and "Dinning Table".
+        // So: the entity's name, minus the device prefix Home Assistant may
+        // have prepended, and the device name only when nothing is left.
+        label: RoomTemplate.label(friendly, deviceName),
       });
     }
     return found;
@@ -171,6 +194,27 @@ class RoomTemplate extends HTMLElement {
     return undefined;
   }
 
+  /** What this plug has cost today, if anything is keeping that total.
+   *
+   * The per-plug euro meters are generated from the plug-to-meter links (see
+   * scripts/apply_socket_links.py in the house repo) and are named after the
+   * device: "Fridge" -> `sensor.fridge_cost_today`. Nothing to configure, and
+   * nothing shown when the total does not exist.
+   */
+  _costToday(socket) {
+    const configured = (this._config.cost_entities || {})[socket.device];
+    const slug = socket.device
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    for (const id of [configured, `sensor.${slug}_cost_today`]) {
+      if (!id) continue;
+      const state = this._hass.states[id];
+      if (state && !isNaN(Number(state.state))) return Number(state.state);
+    }
+    return undefined;
+  }
+
   /** Metered plugs: the switch to press, or the reading when there is none. */
   _sockets(entities) {
     const byDevice = new Map();
@@ -188,17 +232,15 @@ class RoomTemplate extends HTMLElement {
 
   /* --------------------------------------------------------------- actions */
 
-  _setTarget(delta) {
+  _setTarget(temperature) {
     const thermostat = this._thermostat(this._entities());
-    if (!thermostat) return;
-    const step = Number(this._config.step) || 0.5;
+    if (!thermostat || isNaN(temperature)) return;
+    const value = Math.round(temperature * 2) / 2;
 
     if (thermostat.kind === "ir") {
-      const current = Number(thermostat.state.state);
-      if (isNaN(current)) return;
       this._hass.callService("input_number", "set_value", {
         entity_id: thermostat.entity,
-        value: Math.round((current + delta * step) * 10) / 10,
+        value,
       });
       // The helper is only a number until the script sends the code.
       if (thermostat.apply) {
@@ -208,11 +250,9 @@ class RoomTemplate extends HTMLElement {
       return;
     }
 
-    const target = Number(thermostat.state.attributes.temperature);
-    if (isNaN(target)) return;
     this._hass.callService("climate", "set_temperature", {
       entity_id: thermostat.entity,
-      temperature: Math.round((target + delta * step) * 10) / 10,
+      temperature: value,
     });
   }
 
@@ -220,8 +260,6 @@ class RoomTemplate extends HTMLElement {
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const { action, value } = target.dataset;
-    if (action === "warmer") this._setTarget(1);
-    if (action === "cooler") this._setTarget(-1);
     if (action === "toggle") {
       this._hass.callService("homeassistant", "toggle", { entity_id: value });
     }
@@ -273,23 +311,38 @@ class RoomTemplate extends HTMLElement {
     if (thermostat) {
       const target =
         thermostat.kind === "ir"
-          ? this._number(thermostat.state.state)
-          : this._number(thermostat.state.attributes.temperature);
+          ? Number(thermostat.state.state)
+          : Number(thermostat.state.attributes.temperature);
       const current =
         thermostat.kind === "climate"
           ? this._number(thermostat.state.attributes.current_temperature)
           : undefined;
+      // A slider rather than a pair of arrows: setting 21.5 from 18 is one drag
+      // instead of seven presses, and the position itself says where in the
+      // range the room is set.
+      const min = Number(
+        thermostat.kind === "climate" ? thermostat.state.attributes.min_temp ?? 5 : config.min ?? 5
+      );
+      const max = Number(
+        thermostat.kind === "climate" ? thermostat.state.attributes.max_temp ?? 30 : config.max ?? 30
+      );
+      const step = Number(config.step) || 0.5;
+      const shown = isNaN(target) ? "—" : `${target.toFixed(1)}°`;
       rows.push(`
         <div class="thermostat">
-          <div class="label">
-            <div class="title">Target</div>
-            <div class="sub">${this._esc(thermostat.label)}${
-              current !== undefined ? ` · now ${this._esc(current)}°` : ""
-            }</div>
+          <div class="head-row">
+            <div class="label">
+              <div class="title">Target</div>
+              <div class="sub">${this._esc(thermostat.label)}${
+                current !== undefined ? ` · now ${this._esc(current)}°` : ""
+              }</div>
+            </div>
+            <div class="target">${this._esc(shown)}</div>
           </div>
-          <button class="round" data-action="cooler" aria-label="Cooler">−</button>
-          <div class="target">${target === undefined ? "—" : `${this._esc(target)}°`}</div>
-          <button class="round accent" data-action="warmer" aria-label="Warmer">+</button>
+          <input class="slider" type="range" data-action="target"
+                 min="${min}" max="${max}" step="${step}"
+                 value="${isNaN(target) ? (min + max) / 2 : target}">
+          <div class="scale"><span>${min}°</span><span>${max}°</span></div>
         </div>`);
     }
 
@@ -303,7 +356,7 @@ class RoomTemplate extends HTMLElement {
             const detail = on && brightness ? `${Math.round(brightness / 2.55)}%` : on ? "On" : "Off";
             return `<button class="chip${on ? " active" : ""}" data-action="toggle" data-value="${this._esc(light.id)}">
                       <ha-icon icon="mdi:lightbulb"></ha-icon>
-                      <span class="chip-name">${this._esc(light.device || light.name)}</span>
+                      <span class="chip-name">${this._esc(light.label)}</span>
                       <span class="chip-sub">${this._esc(detail)}</span>
                     </button>`;
           })
@@ -319,10 +372,14 @@ class RoomTemplate extends HTMLElement {
           .map((socket) => {
             const watts = socket.power ? Number(socket.power.state.state) : undefined;
             const reading = isNaN(watts) || watts === undefined ? "" : `${Math.round(watts)} W`;
-            // Price is the rate the socket is costing right now, not a total:
-            // watts at the current block's price.
-            const perHour =
-              tariff !== undefined && watts !== undefined && !isNaN(watts)
+            // Two different questions on one line: what it is drawing now, and
+            // what it has cost since midnight. The rate answers neither on its
+            // own - a fridge at 60 W tells you nothing about the month.
+            const spent = this._costToday(socket);
+            const cost =
+              spent !== undefined
+                ? `€${spent.toFixed(2)} today`
+                : tariff !== undefined && watts !== undefined && !isNaN(watts)
                 ? `€${((watts / 1000) * tariff).toFixed(2)}/h`
                 : "";
             const label = this._esc(socket.device);
@@ -331,7 +388,7 @@ class RoomTemplate extends HTMLElement {
               return `<button class="chip${on ? " active" : ""}" data-action="toggle" data-value="${this._esc(socket.switch.id)}">
                         <ha-icon icon="mdi:power-socket-de"></ha-icon>
                         <span class="chip-name">${label}</span>
-                        <span class="chip-sub">${this._esc([reading, perHour].filter(Boolean).join(" · "))}</span>
+                        <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" · "))}</span>
                       </button>`;
             }
             // No switch: some plugs here are deliberately not switchable from a
@@ -340,7 +397,7 @@ class RoomTemplate extends HTMLElement {
             return `<div class="chip reading" data-action="more-info" data-value="${this._esc(socket.power.id)}">
                       <ha-icon icon="mdi:flash"></ha-icon>
                       <span class="chip-name">${label}</span>
-                      <span class="chip-sub">${this._esc([reading, perHour].filter(Boolean).join(" · "))}</span>
+                      <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" · "))}</span>
                     </div>`;
           })
           .join("")}
@@ -390,18 +447,31 @@ RoomTemplate.styles = `
     background: var(--secondary-background-color);
     border-radius: 12px; padding: 10px 12px;
   }
+  .thermostat { flex-direction: column; align-items: stretch; gap: 8px; }
+  .thermostat .head-row { display: flex; align-items: center; gap: 12px; }
   .thermostat .label { flex: 1; }
   .thermostat .title { font-size: 13px; font-weight: 600; }
   .thermostat .sub { font-size: 12px; color: var(--secondary-text-color); }
   .target { font-size: 24px; font-weight: 700; min-width: 74px; text-align: center; }
-  .round {
-    width: 34px; height: 34px; border-radius: 999px; border: none;
-    background: var(--card-background-color); color: var(--secondary-text-color);
-    font-size: 19px; cursor: pointer; font-family: inherit;
-    transition: transform 90ms ease;
+  .slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 10px; border-radius: 999px; margin: 0;
+    background: var(--card-background-color);
+    cursor: pointer;
   }
-  .round.accent { color: var(--primary-color); }
-  .round:active { transform: scale(0.94); }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 26px; height: 26px; border-radius: 999px;
+    background: var(--primary-color); border: none; cursor: grab;
+  }
+  .slider::-moz-range-thumb {
+    width: 26px; height: 26px; border-radius: 999px;
+    background: var(--primary-color); border: none; cursor: grab;
+  }
+  .scale {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--secondary-text-color);
+  }
   .chip {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 4px; min-height: 74px; padding: 8px 6px;

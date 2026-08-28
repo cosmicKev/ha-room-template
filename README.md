@@ -6,9 +6,11 @@ sockets are drawing and costing.
 ```
 Living Room                              21.4°   48%
 ─────────────────────────────────────────────────────
-Target · Radiator · now 20.1°   [ − ]  21.5°  [ + ]
+Target · Radiator · now 20.1°                   21.5°
+ ────────────●───────────────────────────────────────
+5°                                               30°
 [ Couch lights 45% ] [ Dinning table  Off ]
-[ Entretainment  84 W · €0.02/h ] [ Fridge  61 W · €0.02/h ]
+[ Entretainment  84 W · €0.31 today ] [ Fridge  61 W · €0.22 today ]
                                        Now €0.28/kWh
 ```
 
@@ -28,7 +30,7 @@ otherwise the first sensor of that class in the room. One reading per class, so
 a room with a radiator and a presence sensor does not print its temperature
 twice.
 
-**One target temperature, whichever device owns it.** Where a room has an air
+**One target temperature, on a slider, whichever device owns it.** Where a room has an air
 conditioner it wins — cheaper to run than a radiator — and the card sends the
 target there instead. Two shapes are supported: a `climate` entity of its own,
 or the helper-and-script route an IR-driven unit needs. With no aircon
@@ -36,16 +38,18 @@ configured, with its mode `off`, or with its entities missing, the radiator gets
 it. The row says which device it is driving, so a room with both is never a
 guess.
 
-**Sockets show what they are doing, and what that costs.** A plug with a usable
-switch is a button: tap to toggle, with its live draw on it. A plug without one
-— a fridge, a boiling-water tap, anything deliberately not switchable from a
-dashboard — is a greyed reading rather than a control that looks broken. Both
-carry the price *per hour at the current tariff*, and the card footer carries the
-tariff itself.
+**Sockets show what they are drawing now, and what they have cost today.** Two
+different questions: a fridge at 60 W tells you nothing about the month. A plug
+with a usable switch is a button — tap to toggle, live draw and today's spend on
+it. A plug without one (a fridge, a boiling-water tap, anything deliberately not
+switchable from a dashboard) is a greyed reading rather than a control that looks
+broken.
 
-Price is a rate, not a total: watts at the price of the block you are in. A
-dynamic tariff that steps every quarter hour is read live, so what the card shows
-is what the socket is costing right now.
+Today's spend comes from a `sensor.<device>_cost_today` meter where one exists.
+Where none does, the card falls back to the rate — watts at the current tariff —
+so it says something useful before any of that is set up. The footer carries the
+tariff itself, read live, so a dynamic price that steps every quarter hour is the
+price you see.
 
 ## Options
 
@@ -57,7 +61,9 @@ is what the socket is costing right now.
 | `climate.aircon` | — | A `climate` entity that takes priority when not off |
 | `climate.aircon_ir` | — | `{temperature, mode, apply}` for an IR-driven unit |
 | `tariff` | see below | €/kWh sensor for the price |
-| `step` | `0.5` | Degrees per press |
+| `step` | `0.5` | Slider resolution, in degrees |
+| `min` / `max` | the thermostat's own | Slider range (IR route only) |
+| `cost_entities` | discovered | `{"Fridge": "sensor.fridge_cost_today"}` overrides |
 | `show_climate` / `show_lights` / `show_sockets` / `show_price` | `true` | Rows |
 
 Tariff resolution, finest price block first: the configured `tariff`, then the
