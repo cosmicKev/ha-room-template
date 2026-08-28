@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.1.1";
+const CARD_VERSION = "1.1.2";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -348,7 +348,7 @@ class RoomTemplate extends HTMLElement {
 
     const lights = config.show_lights ? entities.filter((e) => e.domain === "light") : [];
     if (lights.length) {
-      rows.push(`<div class="grid" style="grid-template-columns: repeat(${Math.min(lights.length, 3)}, minmax(0, 1fr))">
+      rows.push(`<div class="grid">
         ${lights
           .map((light) => {
             const on = light.state.state === "on";
@@ -367,7 +367,7 @@ class RoomTemplate extends HTMLElement {
     const tariff = this._tariff();
     const sockets = config.show_sockets ? this._sockets(entities) : [];
     if (sockets.length) {
-      rows.push(`<div class="grid" style="grid-template-columns: repeat(${Math.min(sockets.length, 3)}, minmax(0, 1fr))">
+      rows.push(`<div class="grid">
         ${sockets
           .map((socket) => {
             const watts = socket.power ? Number(socket.power.state.state) : undefined;
@@ -438,7 +438,10 @@ RoomTemplate.styles = `
     border-radius: 999px; padding: 3px 10px; cursor: pointer;
   }
   .body { display: flex; flex-direction: column; gap: 8px; }
-  .grid { display: grid; gap: 8px; }
+  /* auto-fit rather than a fixed column count: two buttons are two halves, four
+     wrap onto a second row and stretch to fill it, and nothing is ever left as a
+     narrow stub beside empty space. */
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
   .thermostat {
     display: flex; align-items: center; gap: 12px;
     background: var(--secondary-background-color);
