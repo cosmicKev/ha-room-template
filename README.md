@@ -45,11 +45,11 @@ it. A plug without one (a fridge, a boiling-water tap, anything deliberately not
 switchable from a dashboard) is a greyed reading rather than a control that looks
 broken.
 
-Today's spend comes from a `sensor.<device>_cost_today` meter where one exists.
-Where none does, the card falls back to the rate — watts at the current tariff —
-so it says something useful before any of that is set up. The footer carries the
-tariff itself, read live, so a dynamic price that steps every quarter hour is the
-price you see.
+Today's spend comes from a `sensor.<device>_cost_today` meter where one exists;
+where none does, the watts stand alone. There is deliberately no euros-per-hour:
+it is a third number that answers neither question and moves under you every time
+the appliance cycles. The footer carries the current tariff itself, read live, so
+a dynamic price that steps every quarter hour is the price you see.
 
 ## Options
 

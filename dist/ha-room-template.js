@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -372,16 +372,13 @@ class RoomTemplate extends HTMLElement {
           .map((socket) => {
             const watts = socket.power ? Number(socket.power.state.state) : undefined;
             const reading = isNaN(watts) || watts === undefined ? "" : `${Math.round(watts)} W`;
-            // Two different questions on one line: what it is drawing now, and
-            // what it has cost since midnight. The rate answers neither on its
-            // own - a fridge at 60 W tells you nothing about the month.
+            // Two questions on one line: what it is drawing NOW, and what it has
+            // spent since midnight. No euros-per-hour - an hourly rate is a
+            // third thing that answers neither, and it changes under you as the
+            // appliance cycles. Where no daily total is kept, the watts stand
+            // alone rather than being padded with a rate.
             const spent = this._costToday(socket);
-            const cost =
-              spent !== undefined
-                ? `€${spent.toFixed(2)} today`
-                : tariff !== undefined && watts !== undefined && !isNaN(watts)
-                ? `€${((watts / 1000) * tariff).toFixed(2)}/h`
-                : "";
+            const cost = spent !== undefined ? `€${spent.toFixed(2)} today` : "";
             const label = this._esc(socket.device);
             if (socket.switch) {
               const on = socket.switch.state.state === "on";
