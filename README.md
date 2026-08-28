@@ -58,12 +58,13 @@ where none does, the watts stand alone. There is deliberately no euros-per-hour:
 it is a third number that answers neither question and moves under you every time
 the appliance cycles.
 
-**The footer is the meter that covers the room, named.** Houses are rarely
-metered room by room — a floor, a circuit, sometimes one appliance — so the card
-does not guess: tell it which meter covers this room and it shows that meter's
-draw and spend under its own name. Told nothing, it shows nothing, which is
-better than a house-wide tariff printed under every room as though it belonged to
-that one.
+**A meter line under the room name, but only when the meter is the room's
+alone.** Houses are rarely metered room by room — a floor, a circuit, sometimes
+one appliance. Give the card a meter that covers only this room (an EV charger on
+a driveway) and it names it and shows its draw and spend. Do not give it a floor
+meter: printed under each of that floor's rooms it reads as the room's own cost
+and triples when you add the rooms up. That figure belongs on the floor heading,
+once.
 
 ```yaml
 meter:

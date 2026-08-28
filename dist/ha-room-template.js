@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.5.0";
+const CARD_VERSION = "1.6.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -209,7 +209,13 @@ class RoomTemplate extends HTMLElement {
     return undefined;
   }
 
-  /** What covers this room, in the meter's own words. */
+  /** What covers this room, in the meter's own words.
+   *
+   * Only worth showing when the meter covers THIS room and nothing else - the
+   * EV charger on the driveway, say. A floor meter printed under each of its
+   * rooms reads as that room's cost and triples when you add the rooms up; that
+   * figure belongs on the floor, once.
+   */
   _meterFooter() {
     const meter = this._config.meter;
     if (!meter) return "";
@@ -440,15 +446,18 @@ class RoomTemplate extends HTMLElement {
             // third thing that answers neither, and it changes under you as the
             // appliance cycles. Where no daily total is kept, the watts stand
             // alone rather than being padded with a rate.
+            // The day's spend in brackets after the watts: "84 W (€0.31)". One
+            // line, two facts, and the brackets say the euros are the total so
+            // far rather than anything happening right now.
             const spent = this._costToday(socket);
-            const cost = spent !== undefined ? `€${spent.toFixed(2)} today` : "";
+            const cost = spent !== undefined ? `(€${spent.toFixed(2)})` : "";
             const label = this._esc(socket.device);
             if (socket.switch) {
               const on = socket.switch.state.state === "on";
               return `<button class="chip${on ? " active" : ""}" data-action="toggle" data-value="${this._esc(socket.switch.id)}">
                         <ha-icon icon="mdi:power-socket-de"></ha-icon>
                         <span class="chip-name">${label}</span>
-                        <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" · "))}</span>
+                        <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" "))}</span>
                       </button>`;
             }
             // No switch: some plugs here are deliberately not switchable from a
@@ -457,7 +466,7 @@ class RoomTemplate extends HTMLElement {
             return `<div class="chip reading" data-action="more-info" data-value="${this._esc(socket.power.id)}">
                       <ha-icon icon="mdi:flash"></ha-icon>
                       <span class="chip-name">${label}</span>
-                      <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" · "))}</span>
+                      <span class="chip-sub">${this._esc([reading, cost].filter(Boolean).join(" "))}</span>
                     </div>`;
           })
           .join("")}
