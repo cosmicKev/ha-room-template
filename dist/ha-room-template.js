@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.13.0";
+const CARD_VERSION = "1.14.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -435,19 +435,16 @@ class RoomTemplate extends HTMLElement {
       const shown = off ? "Off" : `${position.toFixed(1)}°`;
       rows.push(`
         <div class="thermostat">
-          <div class="head-row">
-            <div class="label">
-              <div class="title">Target</div>
-              <div class="sub">${this._esc(thermostat.label)}${
-                current !== undefined ? ` · now ${this._esc(current)}°` : ""
-              }</div>
-            </div>
-            <div class="target${off ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
+          <div class="label">
+            <div class="title">${this._esc(thermostat.label)}</div>
+            <div class="sub">${
+              current !== undefined ? `now ${this._esc(current)}°` : "target"
+            }</div>
           </div>
           <input class="slider" type="range" data-action="target"
                  min="${min}" max="${max}" step="${step}"
                  value="${position}">
-          <div class="scale"><span>${min}°</span><span>${max}°</span></div>
+          <div class="target${off ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
         </div>`);
     }
 
@@ -587,15 +584,20 @@ RoomTemplate.styles = `
      module - a 78px chip - and the thermostat is the only block that is not a
      row of them, so it is sized as two rather than as whatever its contents
      came to. Everything then lines up down the card and across the floor. */
+  /* One chip tall, like every other row. Two was more room than a slider and
+     two numbers need, and it left a radiator standing twice as tall as the
+     lights beside it. The min/max scale went with the second row: the ends of
+     the travel are 15 and 25 on every card here, and the number under the
+     thumb says where you are. */
   .thermostat {
-    flex-direction: column; align-items: stretch; justify-content: center;
-    gap: 8px; height: 164px; box-sizing: border-box;
+    flex-direction: row; align-items: center; gap: 12px;
+    height: 78px; box-sizing: border-box;
   }
-  .thermostat .head-row { display: flex; align-items: center; gap: 12px; }
-  .thermostat .label { flex: 1; }
+  .thermostat .label { flex: 0 0 auto; min-width: 84px; }
   .thermostat .title { font-size: 13px; font-weight: 600; }
   .thermostat .sub { font-size: 12px; color: var(--secondary-text-color); }
-  .target { font-size: 24px; font-weight: 700; min-width: 74px; text-align: center; }
+  .slider { flex: 1; }
+  .target { font-size: 22px; font-weight: 700; min-width: 68px; text-align: right; }
   .target.off { color: var(--secondary-text-color); font-size: 20px; }
   .slider {
     -webkit-appearance: none; appearance: none;
@@ -612,10 +614,7 @@ RoomTemplate.styles = `
     width: 26px; height: 26px; border-radius: 999px;
     background: var(--primary-color); border: none; cursor: grab;
   }
-  .scale {
-    display: flex; justify-content: space-between;
-    font-size: 11px; color: var(--secondary-text-color);
-  }
+
   .chip {
     /* A fixed height, not a minimum: a plug with a cost line was taller than one
        without, so a row of them stepped up and down. The sub line is always
