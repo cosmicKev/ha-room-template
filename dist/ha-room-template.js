@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.4.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -32,6 +32,10 @@ const TARIFF_CANDIDATES = [
 ];
 
 const DEFAULTS = {
+  // Where the handle sits when the thermostat reports no target at all - off,
+  // unavailable, or still waking up. Mid-range would be an accident of the
+  // range; 20 is a temperature someone chose.
+  default_target: 20,
   // A radiator is never set to 5 or to 30: a slider spanning the device's full
   // range spends most of its travel on temperatures nobody picks, which makes
   // the useful part too fine to hit. 15-25 is the band a house is actually
@@ -220,7 +224,10 @@ class RoomTemplate extends HTMLElement {
     }
     if (!parts.length) return "";
     const label = meter.name ? `${this._esc(meter.name)} · ` : "";
-    return `<div class="price">${label}${this._esc(parts.join(" · "))}</div>`;
+    // Under the room's name rather than at the foot of the card: it is a fact
+    // about this room, and the eye reads it on the way past instead of having
+    // to travel to the bottom for it.
+    return `<div class="sub">${label}${this._esc(parts.join(" · "))}</div>`;
   }
 
   _tariff() {
@@ -364,7 +371,9 @@ class RoomTemplate extends HTMLElement {
       const min = Math.max(Number(config.min), isNaN(deviceMin) ? -Infinity : deviceMin);
       const max = Math.min(Number(config.max), isNaN(deviceMax) ? Infinity : deviceMax);
       const step = Number(config.step) || 0.5;
-      const shown = isNaN(target) ? "—" : `${target.toFixed(1)}°`;
+      const fallback = Number(config.default_target);
+      const position = isNaN(target) ? fallback : target;
+      const shown = `${position.toFixed(1)}°`;
       rows.push(`
         <div class="thermostat">
           <div class="head-row">
@@ -378,7 +387,7 @@ class RoomTemplate extends HTMLElement {
           </div>
           <input class="slider" type="range" data-action="target"
                  min="${min}" max="${max}" step="${step}"
-                 value="${isNaN(target) ? (min + max) / 2 : target}">
+                 value="${position}">
           <div class="scale"><span>${min}°</span><span>${max}°</span></div>
         </div>`);
     }
@@ -448,11 +457,13 @@ class RoomTemplate extends HTMLElement {
     const html = `
       <ha-card>
         <div class="head">
-          <div class="name">${this._esc(this._areaName())}</div>
+          <div class="identity">
+            <div class="name">${this._esc(this._areaName())}</div>
+            ${price}
+          </div>
           <div class="badges">${badges}</div>
         </div>
         <div class="body">${rows.join("")}</div>
-        ${price}
       </ha-card>`;
 
     if (html === this._rendered) return;
@@ -469,7 +480,12 @@ RoomTemplate.styles = `
     padding-bottom: 10px; margin-bottom: 12px;
     border-bottom: 1px solid var(--divider-color);
   }
-  .name { font-size: 20px; font-weight: 600; flex: 1; }
+  .identity { flex: 1; min-width: 0; }
+  .name { font-size: 20px; font-weight: 600; }
+  .head .sub {
+    font-size: 12px; color: var(--secondary-text-color);
+    margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .badges { display: flex; gap: 6px; }
   .badge {
     font-size: 15px; color: var(--secondary-text-color);
@@ -528,10 +544,7 @@ RoomTemplate.styles = `
   .chip.reading { color: var(--secondary-text-color); opacity: 0.75; cursor: pointer; }
   .chip-name { line-height: 1.2; }
   .chip-sub { font-size: 11px; font-weight: 500; color: var(--secondary-text-color); }
-  .price {
-    margin-top: 10px; text-align: right;
-    font-size: 12px; color: var(--secondary-text-color);
-  }
+
 `;
 
 customElements.define("ha-room-template", RoomTemplate);
