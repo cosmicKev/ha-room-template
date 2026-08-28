@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.8.0";
+const CARD_VERSION = "1.9.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -583,8 +583,12 @@ RoomTemplate.styles = `
     font-size: 11px; color: var(--secondary-text-color);
   }
   .chip {
+    /* A fixed height, not a minimum: a plug with a cost line was taller than one
+       without, so a row of them stepped up and down. The sub line is always
+       rendered, empty when there is nothing to say, which keeps the icon and the
+       name on the same baseline across every chip on every card. */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 4px; min-height: 74px; padding: 8px 6px;
+    gap: 4px; height: 78px; box-sizing: border-box; padding: 8px 6px;
     border: 1px solid transparent; border-radius: 12px;
     background: var(--secondary-background-color);
     color: var(--primary-text-color);
@@ -598,7 +602,11 @@ RoomTemplate.styles = `
   .chip.active ha-icon { color: var(--primary-color); }
   .chip.reading { color: var(--secondary-text-color); opacity: 0.75; cursor: pointer; }
   .chip-name { line-height: 1.2; }
-  .chip-sub { font-size: 11px; font-weight: 500; color: var(--secondary-text-color); }
+  .chip-sub {
+    font-size: 11px; font-weight: 500; color: var(--secondary-text-color);
+    min-height: 13px; line-height: 13px;
+  }
+  .grid { align-items: stretch; }
 
 `;
 
