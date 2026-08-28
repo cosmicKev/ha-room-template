@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.12.0";
+const CARD_VERSION = "1.13.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -583,7 +583,14 @@ RoomTemplate.styles = `
     background: var(--secondary-background-color);
     border-radius: 12px; padding: 10px 12px;
   }
-  .thermostat { flex-direction: column; align-items: stretch; gap: 8px; }
+  /* Two chips tall, plus the gap between them: the card is built from one
+     module - a 78px chip - and the thermostat is the only block that is not a
+     row of them, so it is sized as two rather than as whatever its contents
+     came to. Everything then lines up down the card and across the floor. */
+  .thermostat {
+    flex-direction: column; align-items: stretch; justify-content: center;
+    gap: 8px; height: 164px; box-sizing: border-box;
+  }
   .thermostat .head-row { display: flex; align-items: center; gap: 12px; }
   .thermostat .label { flex: 1; }
   .thermostat .title { font-size: 13px; font-weight: 600; }
