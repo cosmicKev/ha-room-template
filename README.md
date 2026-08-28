@@ -34,7 +34,11 @@ twice.
 spans 15–25 °C rather than the device's full range: a radiator is never set to 5
 or 30, and a slider that offers them spends most of its travel on temperatures
 nobody picks. The reading follows the handle as you drag, and the service call
-happens once, when you let go. Where a room has an air
+happens once, when you let go. A thermostat that is off says **Off** rather than
+inventing a setpoint, with the handle at the bottom of the band — drag it up and
+the card turns the thermostat on before setting the temperature, because on most
+integrations a setpoint sent to an off thermostat lands on a valve that stays
+shut. Where a room has an air
 conditioner it wins — cheaper to run than a radiator — and the card sends the
 target there instead. Two shapes are supported: a `climate` entity of its own,
 or the helper-and-script route an IR-driven unit needs. With no aircon
@@ -81,6 +85,7 @@ meter:
 | `tariff` | see below | €/kWh sensor, used for socket prices |
 | `step` | `0.5` | Slider resolution, in degrees |
 | `min` / `max` | `15` / `25` | Slider range, clamped by the thermostat's own limits |
+| `default_target` | `20` | Where the handle sits when no target is reported |
 | `cost_entities` | discovered | `{"Fridge": "sensor.fridge_cost_today"}` overrides |
 | `show_climate` / `show_lights` / `show_sockets` / `show_price` | `true` | Rows |
 

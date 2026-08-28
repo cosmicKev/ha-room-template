@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.4.0";
+const CARD_VERSION = "1.5.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -295,6 +295,19 @@ class RoomTemplate extends HTMLElement {
       return;
     }
 
+    // Setting a temperature on a thermostat that is off does nothing on most
+    // integrations - the setpoint lands and the valve stays shut - so asking for
+    // a temperature turns it on first, using whatever heating mode it offers.
+    if (thermostat.state.state === "off") {
+      const modes = thermostat.state.attributes.hvac_modes || [];
+      const mode = ["heat", "auto", "heat_cool"].find((m) => modes.includes(m));
+      if (mode) {
+        this._hass.callService("climate", "set_hvac_mode", {
+          entity_id: thermostat.entity,
+          hvac_mode: mode,
+        });
+      }
+    }
     this._hass.callService("climate", "set_temperature", {
       entity_id: thermostat.entity,
       temperature: value,
@@ -371,9 +384,13 @@ class RoomTemplate extends HTMLElement {
       const min = Math.max(Number(config.min), isNaN(deviceMin) ? -Infinity : deviceMin);
       const max = Math.min(Number(config.max), isNaN(deviceMax) ? Infinity : deviceMax);
       const step = Number(config.step) || 0.5;
+      // A thermostat that is off has no target worth printing: showing 20 there
+      // claims a setpoint it is not holding. The handle parks at the bottom of
+      // the band so dragging it up is the natural way to ask for heat.
+      const off = thermostat.kind === "climate" && thermostat.state.state === "off";
       const fallback = Number(config.default_target);
-      const position = isNaN(target) ? fallback : target;
-      const shown = `${position.toFixed(1)}°`;
+      const position = off ? min : isNaN(target) ? fallback : target;
+      const shown = off ? "Off" : `${position.toFixed(1)}°`;
       rows.push(`
         <div class="thermostat">
           <div class="head-row">
@@ -383,7 +400,7 @@ class RoomTemplate extends HTMLElement {
                 current !== undefined ? ` · now ${this._esc(current)}°` : ""
               }</div>
             </div>
-            <div class="target" data-role="target">${this._esc(shown)}</div>
+            <div class="target${off ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
           </div>
           <input class="slider" type="range" data-action="target"
                  min="${min}" max="${max}" step="${step}"
@@ -508,6 +525,7 @@ RoomTemplate.styles = `
   .thermostat .title { font-size: 13px; font-weight: 600; }
   .thermostat .sub { font-size: 12px; color: var(--secondary-text-color); }
   .target { font-size: 24px; font-weight: 700; min-width: 74px; text-align: center; }
+  .target.off { color: var(--secondary-text-color); font-size: 20px; }
   .slider {
     -webkit-appearance: none; appearance: none;
     width: 100%; height: 10px; border-radius: 999px; margin: 0;
