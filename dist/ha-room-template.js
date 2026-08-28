@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -203,6 +203,24 @@ class RoomTemplate extends HTMLElement {
       return { kind: "climate", entity: radiator, label: "Radiator", state: hass.states[radiator] };
     }
     return undefined;
+  }
+
+  /** What covers this room, in the meter's own words. */
+  _meterFooter() {
+    const meter = this._config.meter;
+    if (!meter) return "";
+    const parts = [];
+    const power = meter.power && this._hass.states[meter.power];
+    if (power && !isNaN(Number(power.state))) {
+      parts.push(`${Math.round(Number(power.state))} W`);
+    }
+    const cost = meter.cost_today && this._hass.states[meter.cost_today];
+    if (cost && !isNaN(Number(cost.state))) {
+      parts.push(`€${Number(cost.state).toFixed(2)} today`);
+    }
+    if (!parts.length) return "";
+    const label = meter.name ? `${this._esc(meter.name)} · ` : "";
+    return `<div class="price">${label}${this._esc(parts.join(" · "))}</div>`;
   }
 
   _tariff() {
@@ -420,10 +438,12 @@ class RoomTemplate extends HTMLElement {
       </div>`);
     }
 
-    const price =
-      config.show_price && tariff !== undefined
-        ? `<div class="price">Now €${tariff.toFixed(2)}/kWh</div>`
-        : "";
+    // The footer belongs to whatever actually meters this room, which is rarely
+    // the room. Metering here is by floor - and a few appliances sit on meters
+    // of their own - so the card is told which meter covers it rather than
+    // guessing, and says so by name. A house-wide tariff repeated under every
+    // room read as if it were that room's price, which it never was.
+    const price = config.show_price ? this._meterFooter() : "";
 
     const html = `
       <ha-card>

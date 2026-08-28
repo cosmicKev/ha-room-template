@@ -52,8 +52,21 @@ broken.
 Today's spend comes from a `sensor.<device>_cost_today` meter where one exists;
 where none does, the watts stand alone. There is deliberately no euros-per-hour:
 it is a third number that answers neither question and moves under you every time
-the appliance cycles. The footer carries the current tariff itself, read live, so
-a dynamic price that steps every quarter hour is the price you see.
+the appliance cycles.
+
+**The footer is the meter that covers the room, named.** Houses are rarely
+metered room by room — a floor, a circuit, sometimes one appliance — so the card
+does not guess: tell it which meter covers this room and it shows that meter's
+draw and spend under its own name. Told nothing, it shows nothing, which is
+better than a house-wide tariff printed under every room as though it belonged to
+that one.
+
+```yaml
+meter:
+  name: 1st floor
+  power: sensor.currentt_1e_power_consumed
+  cost_today: sensor.currentt_1e_cost_today
+```
 
 ## Options
 
@@ -64,7 +77,8 @@ a dynamic price that steps every quarter hour is the price you see.
 | `climate.radiator` | first `climate` in the area | Fallback thermostat |
 | `climate.aircon` | — | A `climate` entity that takes priority when not off |
 | `climate.aircon_ir` | — | `{temperature, mode, apply}` for an IR-driven unit |
-| `tariff` | see below | €/kWh sensor for the price |
+| `meter` | — | `{name, power, cost_today}` of the meter covering this room |
+| `tariff` | see below | €/kWh sensor, used for socket prices |
 | `step` | `0.5` | Slider resolution, in degrees |
 | `min` / `max` | `15` / `25` | Slider range, clamped by the thermostat's own limits |
 | `cost_entities` | discovered | `{"Fridge": "sensor.fridge_cost_today"}` overrides |
