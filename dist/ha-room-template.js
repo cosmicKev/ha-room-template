@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.9.0";
+const CARD_VERSION = "1.9.1";
 
 const ENVIRONMENT = ["temperature", "humidity"];
 // Anything else a plug reports (voltage, current, frequency) is instrumentation,
@@ -85,6 +85,16 @@ class RoomTemplate extends HTMLElement {
       this._dragging = false;
       this._setTarget(Number(slider.value));
     });
+    // A pointer released outside the slider - off the edge of the card, or on a
+    // touch screen that cancels the gesture - never fires `change`, and the card
+    // would stop updating until the next drag.
+    for (const event of ["pointerup", "pointercancel"]) {
+      this.addEventListener(event, () => {
+        if (!this._dragging) return;
+        this._dragging = false;
+        this._render();
+      });
+    }
   }
 
   static getStubConfig(hass) {
@@ -96,6 +106,9 @@ class RoomTemplate extends HTMLElement {
     if (!config || !config.area) throw new Error("Set `area` to an area id");
     this._config = { ...DEFAULTS, ...config };
     this._rendered = "";
+    // A drag in progress belongs to the card that was configured before this
+    // one. Left set, it suppresses every re-render from here on.
+    this._dragging = false;
   }
 
   getCardSize() {
