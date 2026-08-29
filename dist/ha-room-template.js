@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.19.0";
+const CARD_VERSION = "1.20.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -618,17 +618,23 @@ RoomTemplate.styles = `
      beside it. */
   .head {
     display: flex; align-items: center; gap: 10px;
-    height: 78px; box-sizing: border-box;
+    min-height: 78px; box-sizing: border-box;
     padding-bottom: 10px; margin-bottom: 12px;
     border-bottom: 1px solid var(--divider-color);
   }
   .identity { flex: 1; min-width: 0; }
-  .name { font-size: 20px; font-weight: 600; }
+  .name {
+    font-size: 20px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .head .sub {
     font-size: 12px; color: var(--secondary-text-color);
     margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .badges { display: flex; gap: 6px; }
+  /* Same on a narrow screen: the readings stay on the card, the room name gives
+     way. A card with five badges - temperature, humidity, CO2, PM - has more to
+     lose here than the vacuum does. */
+  .badges { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
   .badge {
     font-size: 15px; color: var(--secondary-text-color);
     background: var(--secondary-background-color);
