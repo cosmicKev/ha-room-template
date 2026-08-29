@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.17.0";
+const CARD_VERSION = "1.18.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -55,11 +55,11 @@ const DEFAULTS = {
   // unavailable, or still waking up. Mid-range would be an accident of the
   // range; 20 is a temperature someone chose.
   default_target: 20,
-  // A radiator is never set to 5 or to 30: a slider spanning the device's full
-  // range spends most of its travel on temperatures nobody picks, which makes
-  // the useful part too fine to hit. 15-25 is the band a house is actually
-  // lived in; the device's own limits still clamp it.
-  min: 15,
+  // The bottom of the travel is off, not a temperature. These radiators report
+  // 0 when they are not heating, so the slider starts there and the card turns
+  // that into an hvac-mode call - the device would refuse a setpoint of 0, since
+  // it advertises a min_temp of 5.
+  min: 0,
   max: 25,
   show_climate: true,
   show_lights: true,
@@ -93,7 +93,10 @@ class RoomTemplate extends HTMLElement {
       if (!slider) return;
       this._dragging = true;
       const readout = this.shadowRoot.querySelector('[data-role="target"]');
-      if (readout) readout.textContent = `${Number(slider.value).toFixed(1)}°`;
+      if (readout) {
+        const value = Number(slider.value);
+        readout.textContent = value <= 0.5 ? "Off" : `${value.toFixed(1)}°`;
+      }
     });
     this.shadowRoot.addEventListener("change", (event) => {
       const slider = event.target.closest('[data-action="target"]');
@@ -337,6 +340,16 @@ class RoomTemplate extends HTMLElement {
     if (!thermostat || isNaN(temperature)) return;
     const value = Math.round(temperature * 2) / 2;
 
+    // The bottom of the slider is off. Sending 0 as a setpoint would be refused
+    // by a device whose min_temp is 5, so it goes as a mode change instead.
+    if (thermostat.kind === "climate" && value <= 0.5) {
+      this._hass.callService("climate", "set_hvac_mode", {
+        entity_id: thermostat.entity,
+        hvac_mode: "off",
+      });
+      return;
+    }
+
     if (thermostat.kind === "ir") {
       this._hass.callService("input_number", "set_value", {
         entity_id: thermostat.entity,
@@ -452,10 +465,11 @@ class RoomTemplate extends HTMLElement {
       // A slider rather than a pair of arrows: setting 21.5 from 18 is one drag
       // instead of seven presses, and the position itself says where in the
       // range the room is set.
-      // The configured band, never wider than the device will accept.
-      const deviceMin = Number(thermostat.state.attributes.min_temp);
+      // The top is capped by what the device accepts; the bottom is not, because
+      // below its min_temp lies off, which the card sends as a mode rather than
+      // as a temperature.
       const deviceMax = Number(thermostat.state.attributes.max_temp);
-      const min = Math.max(Number(config.min), isNaN(deviceMin) ? -Infinity : deviceMin);
+      const min = Number(config.min);
       const max = Math.min(Number(config.max), isNaN(deviceMax) ? Infinity : deviceMax);
       const step = Number(config.step) || 0.5;
       // A thermostat that is off has no target worth printing: showing 20 there
