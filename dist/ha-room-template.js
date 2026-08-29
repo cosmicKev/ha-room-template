@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.20.0";
+const CARD_VERSION = "1.21.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -50,6 +50,11 @@ const TARIFF_CANDIDATES = [
   "sensor.zonneplan_current_electricity_tariff",
 ];
 
+// How long the card keeps showing a setpoint the device has not confirmed.
+// Long enough for a Matter TRV to answer, short enough that a change made
+// somewhere else is not hidden behind it.
+const HOLD_MS = 15000;
+
 const DEFAULTS = {
   // Where the handle sits when the thermostat reports no target at all - off,
   // unavailable, or still waking up. Mid-range would be an accident of the
@@ -83,6 +88,7 @@ class RoomTemplate extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._rendered = "";
+    this._held = undefined;
     this.shadowRoot.addEventListener("click", (event) => this._onClick(event));
     // Two listeners, two jobs. `input` fires on every step of the drag and only
     // updates the number on screen - without it the slider is a handle with no
@@ -91,29 +97,64 @@ class RoomTemplate extends HTMLElement {
     this.shadowRoot.addEventListener("input", (event) => {
       const slider = event.target.closest('[data-action="target"]');
       if (!slider) return;
-      this._dragging = true;
+      this._hold(Number(slider.value));
       const readout = this.shadowRoot.querySelector('[data-role="target"]');
       if (readout) {
         const value = Number(slider.value);
         readout.textContent = value <= 0.5 ? "Off" : `${value.toFixed(1)}°`;
+        readout.classList.toggle("off", value <= 0.5);
+        // The readout was written straight into the DOM, so the cached html no
+        // longer describes what is on screen. Left as it was, the next render
+        // that produced the same string would decide there was nothing to do
+        // and leave the hand-written number standing.
+        this._rendered = "";
       }
     });
     this.shadowRoot.addEventListener("change", (event) => {
       const slider = event.target.closest('[data-action="target"]');
       if (!slider) return;
-      this._dragging = false;
-      this._setTarget(Number(slider.value));
+      const value = Number(slider.value);
+      // Keep holding after the finger lifts. A radiator takes seconds to report
+      // the setpoint back - over Matter, sometimes ten - and every state push in
+      // between still carries the old number. Without the hold the handle walks
+      // back to where it was and the change looks like it was refused.
+      this._hold(value);
+      this._setTarget(value);
     });
-    // A pointer released outside the slider - off the edge of the card, or on a
-    // touch screen that cancels the gesture - never fires `change`, and the card
-    // would stop updating until the next drag.
-    for (const event of ["pointerup", "pointercancel"]) {
-      this.addEventListener(event, () => {
-        if (!this._dragging) return;
-        this._dragging = false;
-        this._render();
-      });
+  }
+
+  /** Show `value` on the slider until the device reports it, or the hold ages out.
+   *
+   * This replaces a `_dragging` flag that gated every render: a range fires
+   * `input` for a mouse wheel and for arrow keys, neither of which is followed
+   * by a `change` or a `pointerup`, so the flag stuck on and the card stopped
+   * redrawing for lights, plugs and everything else. A hold expires by itself,
+   * and only ever overrides the one number it is holding.
+   */
+  _hold(value) {
+    this._held = { value, until: Date.now() + HOLD_MS };
+    clearTimeout(this._holdTimer);
+    this._holdTimer = setTimeout(() => {
+      this._held = undefined;
+      this._render();
+    }, HOLD_MS);
+  }
+
+  /** The setpoint to draw: what is being asked for, else what the device reports. */
+  _heldTarget(reported) {
+    const held = this._held;
+    if (!held) return reported;
+    if (Date.now() > held.until) {
+      this._held = undefined;
+      return reported;
     }
+    // The device has caught up - stop overriding, so a change made elsewhere
+    // is not masked by a stale hold.
+    if (!isNaN(reported) && Math.abs(reported - held.value) < 0.05) {
+      this._held = undefined;
+      return reported;
+    }
+    return held.value;
   }
 
   static getStubConfig(hass) {
@@ -125,9 +166,8 @@ class RoomTemplate extends HTMLElement {
     if (!config || !config.area) throw new Error("Set `area` to an area id");
     this._config = { ...DEFAULTS, ...config };
     this._rendered = "";
-    // A drag in progress belongs to the card that was configured before this
-    // one. Left set, it suppresses every re-render from here on.
-    this._dragging = false;
+    this._held = undefined;
+    clearTimeout(this._holdTimer);
   }
 
   getCardSize() {
@@ -136,9 +176,10 @@ class RoomTemplate extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Re-rendering mid-drag would rebuild the slider from the state the
-    // thermostat still reports and snap the handle out from under the finger.
-    if (this._dragging) return;
+    // Always renders. Nothing suppresses this: a card that skips a state push
+    // has no way of knowing to catch up later, and the one thing a drag needs
+    // protecting - the number under the finger - is protected by the hold
+    // instead, which expires on its own.
     this._render();
   }
 
@@ -461,13 +502,23 @@ class RoomTemplate extends HTMLElement {
     }).join("");
 
     const rows = [];
+    let sliderPosition;
 
     const thermostat = config.show_climate ? this._thermostat(entities) : undefined;
     if (thermostat) {
-      const target =
+      const reported =
         thermostat.kind === "ir"
           ? Number(thermostat.state.state)
           : Number(thermostat.state.attributes.temperature);
+      const target = this._heldTarget(reported);
+      // A radiator that has dropped off the network reports no setpoint at all.
+      // Drawing the configured default there invents a number the device never
+      // held - which is what made a refresh look like it reset every radiator to
+      // 20 - so the row says so instead and the slider does not pretend to be
+      // driving anything.
+      const gone = thermostat.state.state === "unavailable"
+        || thermostat.state.state === "unknown"
+        || isNaN(target);
       const current =
         thermostat.kind === "climate"
           ? this._number(thermostat.state.attributes.current_temperature)
@@ -490,22 +541,32 @@ class RoomTemplate extends HTMLElement {
       // regardless of the min_temp it advertises.
       const off = thermostat.kind === "climate"
         && (thermostat.state.state === "off" || target <= 0.5);
+      // The handle sits on the setpoint the device is actually holding, off or
+      // not. Parking it at the bottom whenever the mode was `off` threw the
+      // stored temperature away: these TRVs sit at `off` with a perfectly good
+      // 15 or 25 behind them, and every refresh dragged the handle back down to
+      // the floor. Off is said by the readout and the power button, which is
+      // where it belongs - the slider's job is to show the number.
       const fallback = Number(config.default_target);
-      const position = off ? min : isNaN(target) ? fallback : target;
-      const shown = off ? "Off" : `${position.toFixed(1)}°`;
+      const position = gone ? fallback : isNaN(target) ? fallback : target;
+      const shown = gone
+        ? "—"
+        : `${position.toFixed(1)}°`;
+      sliderPosition = position;
       rows.push(`
         <div class="thermostat">
           <div class="label">
             <div class="title">${this._esc(thermostat.label)}</div>
             <div class="sub">${
-              current !== undefined ? `now ${this._esc(current)}°` : "target"
+              gone ? "offline" : current !== undefined ? `now ${this._esc(current)}°` : "target"
             }</div>
           </div>
           <input class="slider" type="range" data-action="target"
                  min="${min}" max="${max}" step="${step}"
-                 value="${position}">
-          <div class="target${off ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
-          <button class="power${off ? "" : " on"}" data-action="heat-toggle"
+                 value="${position}"${gone ? " disabled" : ""}>
+          <div class="target${off || gone ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
+          <button class="power${off || gone ? "" : " on"}" data-action="heat-toggle"
+                  ${gone ? "disabled" : ""}
                   title="${off ? "Turn heating on" : "Turn heating off"}">
             <ha-icon icon="mdi:power"></ha-icon>
           </button>
@@ -599,6 +660,11 @@ class RoomTemplate extends HTMLElement {
     if (html === this._rendered) return;
     this._rendered = html;
     this.shadowRoot.innerHTML = `<style>${RoomTemplate.styles}</style>${html}`;
+    // `value` on a range is the attribute's default, not its value, and the two
+    // part company the moment anything touches the control. Writing the property
+    // after the markup keeps the handle on what the state says.
+    const slider = this.shadowRoot.querySelector('[data-action="target"]');
+    if (slider && sliderPosition !== undefined) slider.value = String(sliderPosition);
   }
 }
 
