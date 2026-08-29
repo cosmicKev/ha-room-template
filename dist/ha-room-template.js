@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.18.0";
+const CARD_VERSION = "1.19.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -196,9 +196,15 @@ class RoomTemplate extends HTMLElement {
         picked[kind] = { id: assigned, state: this._hass.states[assigned] };
         continue;
       }
-      // One reading per class: rooms here have a radiator and a presence sensor
-      // both reporting temperature, and one device reports humidity twice.
-      const match = entities.find((e) => e.domain === "sensor" && e.deviceClass === kind);
+      // One reading per class - a room may have a radiator and a presence sensor
+      // both reporting temperature - and preferably one that is actually
+      // reporting. A device that is re-paired leaves its old entities behind as
+      // `unavailable`, and picking the first match found meant picking the
+      // corpse: the living room lost its humidity that way while a working
+      // sensor sat beside it.
+      const matches = entities.filter((e) => e.domain === "sensor" && e.deviceClass === kind);
+      const live = matches.find((e) => !isNaN(Number(e.state.state)));
+      const match = live || matches[0];
       if (match) picked[kind] = match;
     }
     return picked;
@@ -324,9 +330,13 @@ class RoomTemplate extends HTMLElement {
       const socket = byDevice.get(key) || { device: entity.device || entity.label };
       if (entity.domain === "switch" && !socket.switch) socket.switch = entity;
       if (entity.domain === "sensor" && entity.deviceClass === SOCKET_CLASS) {
-        if (!socket.power || powerRank(entity.id) < powerRank(socket.power.id)) {
-          socket.power = entity;
-        }
+        // A reading that reports beats a better-named one that does not.
+        const live = !isNaN(Number(entity.state.state));
+        const heldLive = socket.power && !isNaN(Number(socket.power.state.state));
+        const better = !socket.power
+          || (live && !heldLive)
+          || (live === heldLive && powerRank(entity.id) < powerRank(socket.power.id));
+        if (better) socket.power = entity;
       }
       byDevice.set(key, socket);
     }
