@@ -12,7 +12,7 @@
  * and membership comes from the registry the frontend hands us.
  */
 
-const CARD_VERSION = "1.16.0";
+const CARD_VERSION = "1.17.0";
 
 // What a room reports about its own air, in the order it reads in the header.
 // CO2 and particulates are here because a room sensor that measures them is
@@ -373,6 +373,21 @@ class RoomTemplate extends HTMLElement {
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const { action, value } = target.dataset;
+    if (action === "heat-toggle") {
+      const thermostat = this._thermostat(this._entities());
+      if (thermostat && thermostat.kind === "climate") {
+        const state = thermostat.state;
+        const target = Number(state.attributes.temperature);
+        const isOff = state.state === "off" || target <= 0.5;
+        const modes = state.attributes.hvac_modes || [];
+        const heating = ["heat", "auto", "heat_cool"].find((m) => modes.includes(m));
+        this._hass.callService("climate", "set_hvac_mode", {
+          entity_id: thermostat.entity,
+          hvac_mode: isOff ? heating || "heat" : "off",
+        });
+      }
+      return;
+    }
     if (action === "toggle") {
       this._hass.callService("homeassistant", "toggle", { entity_id: value });
     }
@@ -446,7 +461,11 @@ class RoomTemplate extends HTMLElement {
       // A thermostat that is off has no target worth printing: showing 20 there
       // claims a setpoint it is not holding. The handle parks at the bottom of
       // the band so dragging it up is the natural way to ask for heat.
-      const off = thermostat.kind === "climate" && thermostat.state.state === "off";
+      // Off has two spellings on these radiators: the hvac mode, and a target
+      // of 0 - which is what a Tado TRV reports when it is not heating at all,
+      // regardless of the min_temp it advertises.
+      const off = thermostat.kind === "climate"
+        && (thermostat.state.state === "off" || target <= 0.5);
       const fallback = Number(config.default_target);
       const position = off ? min : isNaN(target) ? fallback : target;
       const shown = off ? "Off" : `${position.toFixed(1)}°`;
@@ -462,6 +481,10 @@ class RoomTemplate extends HTMLElement {
                  min="${min}" max="${max}" step="${step}"
                  value="${position}">
           <div class="target${off ? " off" : ""}" data-role="target">${this._esc(shown)}</div>
+          <button class="power${off ? "" : " on"}" data-action="heat-toggle"
+                  title="${off ? "Turn heating on" : "Turn heating off"}">
+            <ha-icon icon="mdi:power"></ha-icon>
+          </button>
         </div>`);
     }
 
@@ -616,6 +639,15 @@ RoomTemplate.styles = `
   .slider { flex: 1; }
   .target { font-size: 22px; font-weight: 700; min-width: 68px; text-align: right; }
   .target.off { color: var(--secondary-text-color); font-size: 20px; }
+  .power {
+    flex: 0 0 auto; width: 34px; height: 34px; border: none; border-radius: 999px;
+    background: var(--card-background-color); color: var(--secondary-text-color);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: transform 90ms ease, color 120ms ease;
+  }
+  .power ha-icon { --mdc-icon-size: 20px; }
+  .power.on { color: var(--primary-color); }
+  .power:active { transform: scale(0.94); }
   .slider {
     -webkit-appearance: none; appearance: none;
     width: 100%; height: 10px; border-radius: 999px; margin: 0;
